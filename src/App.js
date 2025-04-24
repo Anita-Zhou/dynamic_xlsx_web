@@ -42,12 +42,10 @@ function App() {
     const newHighlightedCells = new Set(highlightedCells);
     const newConditions = { ...highlightedConditions, [colIndex]: condition };
 
-    // Clear previous highlights of this column
     for (let rowIndex = 0; rowIndex < data.length; rowIndex++) {
       newHighlightedCells.delete(`${rowIndex}-${colIndex}`);
     }
 
-    // Apply new condition
     data.forEach((row, rowIndex) => {
       try {
         if (eval(`${row[colIndex]} ${condition}`)) {
@@ -87,6 +85,18 @@ function App() {
   return (
     <div className="container">
       <h1>Excel Highlighter</h1>
+
+      <div className="mode-selector">
+        <label htmlFor="mode">Select Processing Mode: </label>
+        <select id="mode" value={mode} onChange={(e) => setMode(e.target.value)}>
+          <option value="default">默认模式 (Default Processing Mode)</option>
+          <option value="keywords">Sorftime 反查关键词—表格处理</option>
+          <option value="orders">Sorftime 反查出单词—表格处理</option>
+          <option value="top100">Sorftime Top100产品—表格处理</option>
+          <option value="unlimited">Sorftime 不限产品—表格处理</option>
+        </select>
+      </div>
+
       <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} />
 
       {rawData.length > 0 && titleRowIndex === null && (
@@ -116,40 +126,25 @@ function App() {
         </div>
       )}
 
-      {headers.length > 0 && (
-        <>
-          <div className="mode-selector">
-            <label htmlFor="mode">Select Processing Mode: </label>
-            <select id="mode" value={mode} onChange={(e) => setMode(e.target.value)}>
-              <option value="default"> 默认模式 </option>
-              <option value="keywords"> Sorftime 反查关键词—表格处理 </option>
-              <option value="orders"> Sorftime 反查出单词—表格处理 </option>
-              <option value="top100"> Sorftime Top100产品—表格处理 </option>
-              <option value="unlimited"> Sorftime 不限产品—表格处理 </option>
-            </select>
-          </div>
-
-          {mode === 'default' && (
-            <div className="controls">
-              <select onChange={(e) => setSelectedColumn(e.target.value)} value={selectedColumn}>
-                <option value="">Select Column</option>
-                {headers.map((header, i) => (
-                  <option key={i} value={header}>{header}</option>
-                ))}
-              </select>
-              <input
-                type="text"
-                placeholder="e.g., > 100"
-                value={condition}
-                onChange={(e) => setCondition(e.target.value)}
-              />
-              <button onClick={handleHighlight}>Highlight</button>
-              <button onClick={() => setShowOnlyHighlighted(!showOnlyHighlighted)}>
-                {showOnlyHighlighted ? 'Show All Rows' : 'Show Highlighted Only'}
-              </button>
-            </div>
-          )}
-        </>
+      {headers.length > 0 && mode === 'default' && (
+        <div className="controls">
+          <select onChange={(e) => setSelectedColumn(e.target.value)} value={selectedColumn}>
+            <option value="">Select Column</option>
+            {headers.map((header, i) => (
+              <option key={i} value={header}>{header}</option>
+            ))}
+          </select>
+          <input
+            type="text"
+            placeholder="e.g., > 100"
+            value={condition}
+            onChange={(e) => setCondition(e.target.value)}
+          />
+          <button onClick={handleHighlight}>Highlight</button>
+          <button onClick={() => setShowOnlyHighlighted(!showOnlyHighlighted)}>
+            {showOnlyHighlighted ? 'Show All Rows' : 'Show Highlighted Only'}
+          </button>
+        </div>
       )}
 
       {headers.length > 0 && (

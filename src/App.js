@@ -175,7 +175,7 @@ function App() {
             <div className="controls">
               <select onChange={(e) => setSelectedColumn(e.target.value)} value={selectedColumn}>
                 <option value="">Select Column</option>
-                {headers.map((header, i) => (
+                {visibleColumns.map((header, i) => (
                   <option key={i} value={header}>{header}</option>
                 ))}
               </select>

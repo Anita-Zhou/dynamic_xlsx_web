@@ -1,6 +1,134 @@
 import React, { useState } from 'react';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'sheetjs-style';
 import './App.css';
+
+function exportToExcel(data, headers, filename, highlightedCells, visibleHeaders) {
+  const workbook = XLSX.utils.book_new();
+  const ws = {};
+
+  // Write headers
+  visibleHeaders.forEach((header, colIndex) => {
+    const cellRef = XLSX.utils.encode_cell({ r: 0, c: colIndex });
+    ws[cellRef] = {
+      v: header,
+      t: 's',
+      s: {
+        font: { bold: true },
+        fill: { patternType: 'solid', fgColor: { rgb: 'DDDDDD' } }
+      }
+    };
+  });
+
+  // Debug output
+  console.log("Highlighted cells:", [...highlightedCells]);
+
+  // Write data rows
+  data.forEach((row, rowIndex) => {
+    visibleHeaders.forEach((header, colIndex) => {
+      const originalColIndex = headers.indexOf(header);
+      const value = row[originalColIndex];
+      const cellRef = XLSX.utils.encode_cell({ r: rowIndex + 1, c: colIndex });
+
+      const isHighlighted = highlightedCells.has(`${rowIndex}-${originalColIndex}`);
+
+      // Log each cell check for debugging
+      console.log(`(${rowIndex}, ${originalColIndex}) -> highlight:`, highlightedCells.has(`${rowIndex}-${originalColIndex}`));
+
+      const baseCell = {
+        v: value,
+        t: typeof value === 'number' ? 'n' : 's'
+      };
+
+      if (isHighlighted) {
+        baseCell.s = {
+          font: { bold: true },
+          fill: {
+            patternType: 'solid',
+            fgColor: { rgb: 'FFFF00' } // Pure yellow fill
+          }
+        };
+      }
+
+      ws[cellRef] = baseCell;
+    });
+  });
+
+  const totalRows = data.length + 1;
+  const totalCols = visibleHeaders.length;
+  ws['!ref'] = XLSX.utils.encode_range({
+    s: { r: 0, c: 0 },
+    e: { r: totalRows - 1, c: totalCols - 1 }
+  });
+
+  XLSX.utils.book_append_sheet(workbook, ws, 'Sheet1');
+  XLSX.writeFile(workbook, `${filename}.xlsx`);
+}
+
+
+
+function filterExportData(data, headers, highlightedCells, showOnlyHighlighted, highlightThreshold) {
+  return data.filter((row, rowIndex) => {
+    const highlightCount = headers.reduce((count, _, colIndex) => (
+      highlightedCells.has(`${rowIndex}-${colIndex}`) ? count + 1 : count
+    ), 0);
+
+    if (showOnlyHighlighted && highlightThreshold === '') {
+      return highlightCount > 0;
+    } else if (highlightThreshold !== '') {
+      return highlightCount === parseInt(highlightThreshold);
+    }
+    return true;
+  });
+}
+
+function processDefaultMode({
+  selectedColumn,
+  headers,
+  data,
+  condition,
+  highlightedCells,
+  highlightedConditions,
+  setHighlightedCells,
+  setHighlightedConditions
+}) {
+  const colIndex = headers.indexOf(selectedColumn);
+  if (colIndex === -1) return;
+
+  const newHighlightedCells = new Set(highlightedCells);
+  const newConditions = { ...highlightedConditions, [colIndex]: condition };
+
+  for (let rowIndex = 0; rowIndex < data.length; rowIndex++) {
+    newHighlightedCells.delete(`${rowIndex}-${colIndex}`);
+  }
+
+  data.forEach((row, rowIndex) => {
+    try {
+      if (eval(`${row[colIndex]} ${condition}`)) {
+        newHighlightedCells.add(`${rowIndex}-${colIndex}`);
+      }
+    } catch (e) {
+      console.warn("Condition failed on row", rowIndex, e);
+    }
+  });
+
+  setHighlightedCells(newHighlightedCells);
+  setHighlightedConditions(newConditions);
+}
+
+function processDataByMode(mode, handlers) {
+  switch (mode) {
+    case 'default':
+      processDefaultMode(handlers);
+      break;
+    case 'keywords':
+    case 'orders':
+    case 'top100':
+    case 'unlimited':
+    case 'merge':
+    default:
+      break;
+  }
+}
 
 function App() {
   const [rawData, setRawData] = useState([]);
@@ -15,10 +143,9 @@ function App() {
   const [highlightThreshold, setHighlightThreshold] = useState('');
   const [mode, setMode] = useState('default');
   const [visibleColumns, setVisibleColumns] = useState([]);
+  const [exportFileName, setExportFileName] = useState('exported_table');
 
-  const pastelColors = [
-    '#fce4ec', '#e3f2fd', '#e8f5e9', '#fff3e0', '#ede7f6', '#f3e5f5', '#e0f2f1', '#f1f8e9'
-  ];
+  const pastelColors = ['#fce4ec', '#e3f2fd', '#e8f5e9', '#fff3e0', '#ede7f6', '#f3e5f5', '#e0f2f1', '#f1f8e9'];
 
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
@@ -43,28 +170,21 @@ function App() {
   };
 
   const handleHighlight = () => {
-    const colIndex = headers.indexOf(selectedColumn);
-    if (colIndex === -1) return;
-
-    const newHighlightedCells = new Set(highlightedCells);
-    const newConditions = { ...highlightedConditions, [colIndex]: condition };
-
-    for (let rowIndex = 0; rowIndex < data.length; rowIndex++) {
-      newHighlightedCells.delete(`${rowIndex}-${colIndex}`);
-    }
-
-    data.forEach((row, rowIndex) => {
-      try {
-        if (eval(`${row[colIndex]} ${condition}`)) {
-          newHighlightedCells.add(`${rowIndex}-${colIndex}`);
-        }
-      } catch (e) {
-        console.warn("Condition failed on row", rowIndex, e);
-      }
+    processDataByMode(mode, {
+      selectedColumn,
+      headers,
+      data,
+      condition,
+      highlightedCells,
+      highlightedConditions,
+      setHighlightedCells,
+      setHighlightedConditions
     });
+  };
 
-    setHighlightedCells(newHighlightedCells);
-    setHighlightedConditions(newConditions);
+  const handleExportClick = () => {
+    const filtered = filterExportData(data, headers, highlightedCells, showOnlyHighlighted, highlightThreshold);
+    exportToExcel(filtered, headers, exportFileName, highlightedCells, visibleColumns);
   };
 
   const toggleColumnVisibility = (column) => {
@@ -74,17 +194,13 @@ function App() {
   };
 
   const toggleSelectAllColumns = (selectAll) => {
-    if (selectAll) {
-      setVisibleColumns([...headers]);
-    } else {
-      setVisibleColumns([]);
-    }
+    setVisibleColumns(selectAll ? [...headers] : []);
   };
 
   const shouldRenderRow = (row, rowIndex) => {
-    const highlightCount = headers.reduce((count, _, colIndex) => {
-      return highlightedCells.has(`${rowIndex}-${colIndex}`) ? count + 1 : count;
-    }, 0);
+    const highlightCount = headers.reduce((count, _, colIndex) => (
+      highlightedCells.has(`${rowIndex}-${colIndex}`) ? count + 1 : count
+    ), 0);
 
     if (showOnlyHighlighted && highlightThreshold === '') {
       return highlightCount > 0;
@@ -120,7 +236,6 @@ function App() {
   return (
     <div className="container">
       <h1>Excel Highlighter</h1>
-
       <div className="mode-selector">
         <label htmlFor="mode">Select Processing Mode: </label>
         <select id="mode" value={mode} onChange={(e) => setMode(e.target.value)}>
@@ -129,6 +244,7 @@ function App() {
           <option value="orders">Sorftime 反查出单词—表格处理</option>
           <option value="top100">Sorftime Top100产品—表格处理</option>
           <option value="unlimited">Sorftime 不限产品—表格处理</option>
+          <option value="merge">集合表格 (Combine Tables)</option>
         </select>
       </div>
 
@@ -151,9 +267,7 @@ function App() {
                   style={{ cursor: 'pointer', backgroundColor: '#f5f5f5', border: '1px solid #ddd' }}
                 >
                   {row.map((cell, j) => (
-                    <td key={j} style={{ border: '1px solid #ccc', padding: '4px 8px' }}>
-                      {cell}
-                    </td>
+                    <td key={j} style={{ border: '1px solid #ccc', padding: '4px 8px' }}>{cell}</td>
                   ))}
                 </tr>
               ))}
@@ -184,33 +298,40 @@ function App() {
             ))}
           </div>
 
-          {mode === 'default' && (
-            <div className="controls">
-              <select onChange={(e) => setSelectedColumn(e.target.value)} value={selectedColumn}>
-                <option value="">Select Column</option>
-                {visibleColumns.map((header, i) => (
-                  <option key={i} value={header}>{header}</option>
-                ))}
-              </select>
+          <div className="controls">
+            <select onChange={(e) => setSelectedColumn(e.target.value)} value={selectedColumn}>
+              <option value="">Select Column</option>
+              {visibleColumns.map((header, i) => (
+                <option key={i} value={header}>{header}</option>
+              ))}
+            </select>
+            <input
+              type="text"
+              placeholder="e.g., > 100"
+              value={condition}
+              onChange={(e) => setCondition(e.target.value)}
+            />
+            <button onClick={handleHighlight}>Highlight</button>
+            <button onClick={() => setShowOnlyHighlighted(!showOnlyHighlighted)}>
+              {showOnlyHighlighted ? 'Show All Rows' : 'Show Highlighted Only'}
+            </button>
+            <input
+              type="number"
+              min="1"
+              placeholder="Highlight count = x"
+              value={highlightThreshold}
+              onChange={(e) => setHighlightThreshold(e.target.value)}
+            />
+            <div style={{ marginTop: '10px' }}>
               <input
                 type="text"
-                placeholder="e.g., > 100"
-                value={condition}
-                onChange={(e) => setCondition(e.target.value)}
+                value={exportFileName}
+                onChange={(e) => setExportFileName(e.target.value)}
+                placeholder="Enter filename"
               />
-              <button onClick={handleHighlight}>Highlight</button>
-              <button onClick={() => setShowOnlyHighlighted(!showOnlyHighlighted)}>
-                {showOnlyHighlighted ? 'Show All Rows' : 'Show Highlighted Only'}
-              </button>
-              <input
-                type="number"
-                min="1"
-                placeholder="Highlight count = x"
-                value={highlightThreshold}
-                onChange={(e) => setHighlightThreshold(e.target.value)}
-              />
+              <button onClick={handleExportClick}>Export to Excel</button>
             </div>
-          )}
+          </div>
         </>
       )}
 

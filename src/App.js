@@ -12,6 +12,7 @@ function App() {
   const [selectedColumn, setSelectedColumn] = useState('');
   const [condition, setCondition] = useState('');
   const [showOnlyHighlighted, setShowOnlyHighlighted] = useState(false);
+  const [mode, setMode] = useState('default');
 
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
@@ -116,24 +117,39 @@ function App() {
       )}
 
       {headers.length > 0 && (
-        <div className="controls">
-          <select onChange={(e) => setSelectedColumn(e.target.value)} value={selectedColumn}>
-            <option value="">Select Column</option>
-            {headers.map((header, i) => (
-              <option key={i} value={header}>{header}</option>
-            ))}
-          </select>
-          <input
-            type="text"
-            placeholder="e.g., > 100"
-            value={condition}
-            onChange={(e) => setCondition(e.target.value)}
-          />
-          <button onClick={handleHighlight}>Highlight</button>
-          <button onClick={() => setShowOnlyHighlighted(!showOnlyHighlighted)}>
-            {showOnlyHighlighted ? 'Show All Rows' : 'Show Highlighted Only'}
-          </button>
-        </div>
+        <>
+          <div className="mode-selector">
+            <label htmlFor="mode">Select Processing Mode: </label>
+            <select id="mode" value={mode} onChange={(e) => setMode(e.target.value)}>
+              <option value="default"> 默认模式 </option>
+              <option value="keywords"> Sorftime 反查关键词—表格处理 </option>
+              <option value="orders"> Sorftime 反查出单词—表格处理 </option>
+              <option value="top100"> Sorftime Top100产品—表格处理 </option>
+              <option value="unlimited"> Sorftime 不限产品—表格处理 </option>
+            </select>
+          </div>
+
+          {mode === 'default' && (
+            <div className="controls">
+              <select onChange={(e) => setSelectedColumn(e.target.value)} value={selectedColumn}>
+                <option value="">Select Column</option>
+                {headers.map((header, i) => (
+                  <option key={i} value={header}>{header}</option>
+                ))}
+              </select>
+              <input
+                type="text"
+                placeholder="e.g., > 100"
+                value={condition}
+                onChange={(e) => setCondition(e.target.value)}
+              />
+              <button onClick={handleHighlight}>Highlight</button>
+              <button onClick={() => setShowOnlyHighlighted(!showOnlyHighlighted)}>
+                {showOnlyHighlighted ? 'Show All Rows' : 'Show Highlighted Only'}
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {headers.length > 0 && (

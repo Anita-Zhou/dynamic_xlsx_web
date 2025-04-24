@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import './App.css';
 
-
 function App() {
-  const [data, setData] = useState([]);
+  const [rawData, setRawData] = useState([]);
+  const [titleRowIndex, setTitleRowIndex] = useState(null);
   const [headers, setHeaders] = useState([]);
+  const [data, setData] = useState([]);
   const [highlightedRows, setHighlightedRows] = useState([]);
   const [selectedColumn, setSelectedColumn] = useState('');
   const [condition, setCondition] = useState('');
@@ -13,27 +14,23 @@ function App() {
 
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
+    if (!file) return;
+
     const reader = new FileReader();
     reader.onload = (evt) => {
-      const bstr = evt.target.result;
-      const wb = XLSX.read(bstr, { type: 'binary' });
+      const arrayBuffer = evt.target.result;
+      const wb = XLSX.read(arrayBuffer, { type: 'array' });
       const wsname = wb.SheetNames[0];
       const ws = wb.Sheets[wsname];
       const raw = XLSX.utils.sheet_to_json(ws, { header: 1 });
-  
-      const headerRowIndex = parseInt(prompt("Which row number is your title row? (e.g., 1 or 2)")) - 1;
-      if (isNaN(headerRowIndex) || headerRowIndex < 0 || headerRowIndex >= raw.length) {
-        alert("Invalid row number.");
-        return;
-      }
-  
-      setHeaders(raw[headerRowIndex]);
-      setData(raw.slice(headerRowIndex + 1));
+      setRawData(raw);
+      setHeaders([]);
+      setData([]);
+      setTitleRowIndex(null);
       setHighlightedRows([]);
     };
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file); // ✅ safer & modern
   };
-  
 
   const handleHighlight = () => {
     const index = headers.indexOf(selectedColumn);
@@ -73,30 +70,66 @@ function App() {
     <div className="container">
       <h1>Excel Highlighter</h1>
       <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} />
-      <div className="controls">
-        <select onChange={(e) => setSelectedColumn(e.target.value)} value={selectedColumn}>
-          <option value="">Select Column</option>
-          {headers.map((header, i) => (
-            <option key={i} value={header}>{header}</option>
-          ))}
-        </select>
-        <input
-          type="text"
-          placeholder="e.g., > 100"
-          value={condition}
-          onChange={(e) => setCondition(e.target.value)}
-        />
-        <button onClick={handleHighlight}>Highlight</button>
-        <button onClick={() => setShowOnlyHighlighted(!showOnlyHighlighted)}>
-          {showOnlyHighlighted ? 'Show All Rows' : 'Show Highlighted Only'}
-        </button>
-      </div>
-      <table>
-        <thead>
-          <tr>{headers.map((h, i) => <th key={i}>{h}</th>)}</tr>
-        </thead>
-        <tbody>{data.map((row, i) => renderRow(row, i))}</tbody>
-      </table>
+
+      {/* Step 1: Pick a title row from preview */}
+      {rawData.length > 0 && titleRowIndex === null && (
+        <div>
+          <h3>在下方预览中，点击标题行:</h3>
+          <table style={{ borderCollapse: 'collapse' }}>
+            <tbody>
+              {rawData.slice(0, 10).map((row, i) => (
+                <tr
+                  key={i}
+                  onClick={() => {
+                    setTitleRowIndex(i);
+                    setHeaders(rawData[i]);
+                    setData(rawData.slice(i + 1));
+                  }}
+                  style={{ cursor: 'pointer', backgroundColor: '#f5f5f5', border: '1px solid #ddd' }}
+                >
+                  {row.map((cell, j) => (
+                    <td key={j} style={{ border: '1px solid #ccc', padding: '4px 8px' }}>
+                      {cell}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Step 2: Column and condition filtering UI */}
+      {headers.length > 0 && (
+        <div className="controls">
+          <select onChange={(e) => setSelectedColumn(e.target.value)} value={selectedColumn}>
+            <option value="">你要处理的列</option>
+            {headers.map((header, i) => (
+              <option key={i} value={header}>{header}</option>
+            ))}
+          </select>
+          <input
+            type="text"
+            placeholder="e.g., > 100"
+            value={condition}
+            onChange={(e) => setCondition(e.target.value)}
+          />
+          <button onClick={handleHighlight}>染色</button>
+          <button onClick={() => setShowOnlyHighlighted(!showOnlyHighlighted)}>
+            {showOnlyHighlighted ? '显示所有行' : '只显示染色行'}
+          </button>
+        </div>
+      )}
+
+      {/* Step 3: Show table */}
+      {headers.length > 0 && (
+        <table>
+          <thead>
+            <tr>{headers.map((h, i) => <th key={i}>{h}</th>)}</tr>
+          </thead>
+          <tbody>{data.map((row, i) => renderRow(row, i))}</tbody>
+        </table>
+      )}
     </div>
   );
 }

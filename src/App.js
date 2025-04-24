@@ -13,6 +13,11 @@ function App() {
   const [condition, setCondition] = useState('');
   const [showOnlyHighlighted, setShowOnlyHighlighted] = useState(false);
   const [mode, setMode] = useState('default');
+  const [visibleColumns, setVisibleColumns] = useState([]);
+
+  const pastelColors = [
+    '#fce4ec', '#e3f2fd', '#e8f5e9', '#fff3e0', '#ede7f6', '#f3e5f5', '#e0f2f1', '#f1f8e9'
+  ];
 
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
@@ -31,6 +36,7 @@ function App() {
       setTitleRowIndex(null);
       setHighlightedCells(new Set());
       setHighlightedConditions({});
+      setVisibleColumns([]);
     };
     reader.readAsArrayBuffer(file);
   };
@@ -60,23 +66,39 @@ function App() {
     setHighlightedConditions(newConditions);
   };
 
+  const toggleColumnVisibility = (column) => {
+    setVisibleColumns(prev =>
+      prev.includes(column) ? prev.filter(c => c !== column) : [...prev, column]
+    );
+  };
+
+  const toggleSelectAllColumns = (selectAll) => {
+    if (selectAll) {
+      setVisibleColumns([...headers]);
+    } else {
+      setVisibleColumns([]);
+    }
+  };
+
   const renderRow = (row, rowIndex) => {
     const isRowHighlighted = row.some((_, colIndex) => highlightedCells.has(`${rowIndex}-${colIndex}`));
     if (showOnlyHighlighted && !isRowHighlighted) return null;
 
     return (
       <tr key={rowIndex}>
-        {row.map((cell, colIndex) => (
-          <td
-            key={colIndex}
-            style={{
-              backgroundColor: highlightedCells.has(`${rowIndex}-${colIndex}`)
-                ? 'lightyellow'
-                : 'transparent'
-            }}
-          >
-            {cell}
-          </td>
+        {headers.map((header, colIndex) => (
+          visibleColumns.includes(header) && (
+            <td
+              key={colIndex}
+              style={{
+                backgroundColor: highlightedCells.has(`${rowIndex}-${colIndex}`)
+                  ? pastelColors[colIndex % pastelColors.length]
+                  : 'transparent'
+              }}
+            >
+              {row[colIndex]}
+            </td>
+          )
         ))}
       </tr>
     );
@@ -111,6 +133,7 @@ function App() {
                     setTitleRowIndex(i);
                     setHeaders(rawData[i]);
                     setData(rawData.slice(i + 1));
+                    setVisibleColumns(rawData[i]);
                   }}
                   style={{ cursor: 'pointer', backgroundColor: '#f5f5f5', border: '1px solid #ddd' }}
                 >
@@ -126,31 +149,59 @@ function App() {
         </div>
       )}
 
-      {headers.length > 0 && mode === 'default' && (
-        <div className="controls">
-          <select onChange={(e) => setSelectedColumn(e.target.value)} value={selectedColumn}>
-            <option value="">Select Column</option>
+      {headers.length > 0 && (
+        <>
+          <div className="column-filter">
+            <strong>显示列：</strong>
+            <label style={{ marginRight: '10px' }}>
+              <input
+                type="checkbox"
+                checked={visibleColumns.length === headers.length}
+                onChange={(e) => toggleSelectAllColumns(e.target.checked)}
+              /> 全选
+            </label>
             {headers.map((header, i) => (
-              <option key={i} value={header}>{header}</option>
+              <label key={i} style={{ marginRight: '10px' }}>
+                <input
+                  type="checkbox"
+                  checked={visibleColumns.includes(header)}
+                  onChange={() => toggleColumnVisibility(header)}
+                /> {header}
+              </label>
             ))}
-          </select>
-          <input
-            type="text"
-            placeholder="e.g., > 100"
-            value={condition}
-            onChange={(e) => setCondition(e.target.value)}
-          />
-          <button onClick={handleHighlight}>Highlight</button>
-          <button onClick={() => setShowOnlyHighlighted(!showOnlyHighlighted)}>
-            {showOnlyHighlighted ? 'Show All Rows' : 'Show Highlighted Only'}
-          </button>
-        </div>
+          </div>
+
+          {mode === 'default' && (
+            <div className="controls">
+              <select onChange={(e) => setSelectedColumn(e.target.value)} value={selectedColumn}>
+                <option value="">Select Column</option>
+                {headers.map((header, i) => (
+                  <option key={i} value={header}>{header}</option>
+                ))}
+              </select>
+              <input
+                type="text"
+                placeholder="e.g., > 100"
+                value={condition}
+                onChange={(e) => setCondition(e.target.value)}
+              />
+              <button onClick={handleHighlight}>Highlight</button>
+              <button onClick={() => setShowOnlyHighlighted(!showOnlyHighlighted)}>
+                {showOnlyHighlighted ? 'Show All Rows' : 'Show Highlighted Only'}
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {headers.length > 0 && (
         <table>
           <thead>
-            <tr>{headers.map((h, i) => <th key={i}>{h}</th>)}</tr>
+            <tr>
+              {headers.map((h, i) => (
+                visibleColumns.includes(h) && <th key={i}>{h}</th>
+              ))}
+            </tr>
           </thead>
           <tbody>{data.map((row, i) => renderRow(row, i))}</tbody>
         </table>

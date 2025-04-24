@@ -12,6 +12,7 @@ function App() {
   const [selectedColumn, setSelectedColumn] = useState('');
   const [condition, setCondition] = useState('');
   const [showOnlyHighlighted, setShowOnlyHighlighted] = useState(false);
+  const [highlightThreshold, setHighlightThreshold] = useState('');
   const [mode, setMode] = useState('default');
   const [visibleColumns, setVisibleColumns] = useState([]);
 
@@ -80,9 +81,21 @@ function App() {
     }
   };
 
+  const shouldRenderRow = (row, rowIndex) => {
+    const highlightCount = headers.reduce((count, _, colIndex) => {
+      return highlightedCells.has(`${rowIndex}-${colIndex}`) ? count + 1 : count;
+    }, 0);
+
+    if (showOnlyHighlighted && highlightThreshold === '') {
+      return highlightCount > 0;
+    } else if (highlightThreshold !== '') {
+      return highlightCount === parseInt(highlightThreshold);
+    }
+    return true;
+  };
+
   const renderRow = (row, rowIndex) => {
-    const isRowHighlighted = row.some((_, colIndex) => highlightedCells.has(`${rowIndex}-${colIndex}`));
-    if (showOnlyHighlighted && !isRowHighlighted) return null;
+    if (!shouldRenderRow(row, rowIndex)) return null;
 
     return (
       <tr key={rowIndex}>
@@ -189,6 +202,13 @@ function App() {
               <button onClick={() => setShowOnlyHighlighted(!showOnlyHighlighted)}>
                 {showOnlyHighlighted ? 'Show All Rows' : 'Show Highlighted Only'}
               </button>
+              <input
+                type="number"
+                min="1"
+                placeholder="Highlight count = x"
+                value={highlightThreshold}
+                onChange={(e) => setHighlightThreshold(e.target.value)}
+              />
             </div>
           )}
         </>

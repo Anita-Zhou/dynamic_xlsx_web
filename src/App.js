@@ -7,7 +7,8 @@ function App() {
   const [titleRowIndex, setTitleRowIndex] = useState(null);
   const [headers, setHeaders] = useState([]);
   const [data, setData] = useState([]);
-  const [highlightedRows, setHighlightedRows] = useState([]);
+  const [highlightedCells, setHighlightedCells] = useState(new Set());
+  const [highlightedConditions, setHighlightedConditions] = useState({});
   const [selectedColumn, setSelectedColumn] = useState('');
   const [condition, setCondition] = useState('');
   const [showOnlyHighlighted, setShowOnlyHighlighted] = useState(false);
@@ -27,36 +28,52 @@ function App() {
       setHeaders([]);
       setData([]);
       setTitleRowIndex(null);
-      setHighlightedRows([]);
+      setHighlightedCells(new Set());
+      setHighlightedConditions({});
     };
-    reader.readAsArrayBuffer(file); // ✅ safer & modern
+    reader.readAsArrayBuffer(file);
   };
 
   const handleHighlight = () => {
-    const index = headers.indexOf(selectedColumn);
-    const matches = data.map((row, i) => {
+    const colIndex = headers.indexOf(selectedColumn);
+    if (colIndex === -1) return;
+
+    const newHighlightedCells = new Set(highlightedCells);
+    const newConditions = { ...highlightedConditions, [colIndex]: condition };
+
+    // Clear previous highlights of this column
+    for (let rowIndex = 0; rowIndex < data.length; rowIndex++) {
+      newHighlightedCells.delete(`${rowIndex}-${colIndex}`);
+    }
+
+    // Apply new condition
+    data.forEach((row, rowIndex) => {
       try {
-        return eval(`${row[index]} ${condition}`) ? i : null;
-      } catch {
-        return null;
+        if (eval(`${row[colIndex]} ${condition}`)) {
+          newHighlightedCells.add(`${rowIndex}-${colIndex}`);
+        }
+      } catch (e) {
+        console.warn("Condition failed on row", rowIndex, e);
       }
-    }).filter(i => i !== null);
-    setHighlightedRows(matches);
+    });
+
+    setHighlightedCells(newHighlightedCells);
+    setHighlightedConditions(newConditions);
   };
 
   const renderRow = (row, rowIndex) => {
-    const isHighlighted = highlightedRows.includes(rowIndex);
-    if (showOnlyHighlighted && !isHighlighted) return null;
+    const isRowHighlighted = row.some((_, colIndex) => highlightedCells.has(`${rowIndex}-${colIndex}`));
+    if (showOnlyHighlighted && !isRowHighlighted) return null;
+
     return (
       <tr key={rowIndex}>
         {row.map((cell, colIndex) => (
           <td
             key={colIndex}
             style={{
-              backgroundColor:
-                isHighlighted && headers[colIndex] === selectedColumn
-                  ? 'lightyellow'
-                  : 'transparent'
+              backgroundColor: highlightedCells.has(`${rowIndex}-${colIndex}`)
+                ? 'lightyellow'
+                : 'transparent'
             }}
           >
             {cell}
@@ -71,10 +88,9 @@ function App() {
       <h1>Excel Highlighter</h1>
       <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} />
 
-      {/* Step 1: Pick a title row from preview */}
       {rawData.length > 0 && titleRowIndex === null && (
         <div>
-          <h3>在下方预览中，点击标题行:</h3>
+          <h3>Select the row to use as the column header:</h3>
           <table style={{ borderCollapse: 'collapse' }}>
             <tbody>
               {rawData.slice(0, 10).map((row, i) => (
@@ -99,11 +115,10 @@ function App() {
         </div>
       )}
 
-      {/* Step 2: Column and condition filtering UI */}
       {headers.length > 0 && (
         <div className="controls">
           <select onChange={(e) => setSelectedColumn(e.target.value)} value={selectedColumn}>
-            <option value="">你要处理的列</option>
+            <option value="">Select Column</option>
             {headers.map((header, i) => (
               <option key={i} value={header}>{header}</option>
             ))}
@@ -114,14 +129,13 @@ function App() {
             value={condition}
             onChange={(e) => setCondition(e.target.value)}
           />
-          <button onClick={handleHighlight}>染色</button>
+          <button onClick={handleHighlight}>Highlight</button>
           <button onClick={() => setShowOnlyHighlighted(!showOnlyHighlighted)}>
-            {showOnlyHighlighted ? '显示所有行' : '只显示染色行'}
+            {showOnlyHighlighted ? 'Show All Rows' : 'Show Highlighted Only'}
           </button>
         </div>
       )}
 
-      {/* Step 3: Show table */}
       {headers.length > 0 && (
         <table>
           <thead>

@@ -1,134 +1,28 @@
 import React, { useState } from 'react';
 import * as XLSX from 'sheetjs-style';
 import './App.css';
+import * as modeHandlers from './utils/modeHandlers';
+import * as exportUtils from './utils/exportUtils';
 
-function exportToExcel(data, headers, filename, highlightedCells, visibleHeaders) {
-  const workbook = XLSX.utils.book_new();
-  const ws = {};
-
-  // Write headers
-  visibleHeaders.forEach((header, colIndex) => {
-    const cellRef = XLSX.utils.encode_cell({ r: 0, c: colIndex });
-    ws[cellRef] = {
-      v: header,
-      t: 's',
-      s: {
-        font: { bold: true },
-        fill: { patternType: 'solid', fgColor: { rgb: 'DDDDDD' } }
-      }
-    };
-  });
-
-  // Debug output
-  console.log("Highlighted cells:", [...highlightedCells]);
-
-  // Write data rows
-  data.forEach((row, rowIndex) => {
-    visibleHeaders.forEach((header, colIndex) => {
-      const originalColIndex = headers.indexOf(header);
-      const value = row[originalColIndex];
-      const cellRef = XLSX.utils.encode_cell({ r: rowIndex + 1, c: colIndex });
-
-      const isHighlighted = highlightedCells.has(`${rowIndex}-${originalColIndex}`);
-
-      // Log each cell check for debugging
-      console.log(`(${rowIndex}, ${originalColIndex}) -> highlight:`, highlightedCells.has(`${rowIndex}-${originalColIndex}`));
-
-      const baseCell = {
-        v: value,
-        t: typeof value === 'number' ? 'n' : 's'
-      };
-
-      if (isHighlighted) {
-        baseCell.s = {
-          font: { bold: true },
-          fill: {
-            patternType: 'solid',
-            fgColor: { rgb: 'FFFF00' } // Pure yellow fill
-          }
-        };
-      }
-
-      ws[cellRef] = baseCell;
-    });
-  });
-
-  const totalRows = data.length + 1;
-  const totalCols = visibleHeaders.length;
-  ws['!ref'] = XLSX.utils.encode_range({
-    s: { r: 0, c: 0 },
-    e: { r: totalRows - 1, c: totalCols - 1 }
-  });
-
-  XLSX.utils.book_append_sheet(workbook, ws, 'Sheet1');
-  XLSX.writeFile(workbook, `${filename}.xlsx`);
-}
-
-
-
-function filterExportData(data, headers, highlightedCells, showOnlyHighlighted, highlightThreshold) {
-  return data.filter((row, rowIndex) => {
-    const highlightCount = headers.reduce((count, _, colIndex) => (
-      highlightedCells.has(`${rowIndex}-${colIndex}`) ? count + 1 : count
-    ), 0);
-
-    if (showOnlyHighlighted && highlightThreshold === '') {
-      return highlightCount > 0;
-    } else if (highlightThreshold !== '') {
-      return highlightCount === parseInt(highlightThreshold);
-    }
-    return true;
-  });
-}
-
-function processDefaultMode({
-  selectedColumn,
-  headers,
-  data,
-  condition,
-  highlightedCells,
-  highlightedConditions,
-  setHighlightedCells,
-  setHighlightedConditions
-}) {
-  const colIndex = headers.indexOf(selectedColumn);
-  if (colIndex === -1) return;
-
-  const newHighlightedCells = new Set(highlightedCells);
-  const newConditions = { ...highlightedConditions, [colIndex]: condition };
-
-  for (let rowIndex = 0; rowIndex < data.length; rowIndex++) {
-    newHighlightedCells.delete(`${rowIndex}-${colIndex}`);
-  }
-
-  data.forEach((row, rowIndex) => {
-    try {
-      if (eval(`${row[colIndex]} ${condition}`)) {
-        newHighlightedCells.add(`${rowIndex}-${colIndex}`);
-      }
-    } catch (e) {
-      console.warn("Condition failed on row", rowIndex, e);
-    }
-  });
-
-  setHighlightedCells(newHighlightedCells);
-  setHighlightedConditions(newConditions);
-}
 
 function processDataByMode(mode, handlers) {
-  switch (mode) {
-    case 'default':
-      processDefaultMode(handlers);
-      break;
-    case 'keywords':
-    case 'orders':
-    case 'top100':
-    case 'unlimited':
-    case 'merge':
-    default:
-      break;
+  const modeFunctionMap = {
+    default: modeHandlers.processDefaultMode,
+    keywords: modeHandlers.processKeywordsMode,
+    orders: modeHandlers.processOrdersMode,
+    top100: modeHandlers.processTop100Mode,
+    unlimited: modeHandlers.processUnlimitedMode,
+    merge: modeHandlers.processMergeMode,
+  };
+
+  const modeFunction = modeFunctionMap[mode];
+  if (modeFunction) {
+    modeFunction(handlers);
+  } else {
+    console.warn(`No handler found for mode: ${mode}`);
   }
 }
+
 
 function App() {
   const [rawData, setRawData] = useState([]);
@@ -183,8 +77,8 @@ function App() {
   };
 
   const handleExportClick = () => {
-    const filtered = filterExportData(data, headers, highlightedCells, showOnlyHighlighted, highlightThreshold);
-    exportToExcel(filtered, headers, exportFileName, highlightedCells, visibleColumns);
+    const filtered = exportUtils.filterExportData(data, headers, highlightedCells, showOnlyHighlighted, highlightThreshold);
+    exportUtils.exportToExcel(filtered, headers, exportFileName, highlightedCells, visibleColumns);
   };
 
   const toggleColumnVisibility = (column) => {
@@ -239,12 +133,12 @@ function App() {
       <div className="mode-selector">
         <label htmlFor="mode">Select Processing Mode: </label>
         <select id="mode" value={mode} onChange={(e) => setMode(e.target.value)}>
-          <option value="default">默认模式 (Default Processing Mode)</option>
-          <option value="keywords">Sorftime 反查关键词—表格处理</option>
-          <option value="orders">Sorftime 反查出单词—表格处理</option>
-          <option value="top100">Sorftime Top100产品—表格处理</option>
-          <option value="unlimited">Sorftime 不限产品—表格处理</option>
-          <option value="merge">集合表格 (Combine Tables)</option>
+          <option value="default"> 默认模式 </option>
+          <option value="keywords"> Sorftime 反查关键词—表格处理</option>
+          <option value="orders"> Sorftime 反查出单词—表格处理 </option>
+          <option value="top100"> Sorftime Top100产品—表格处理 </option>
+          <option value="unlimited"> Sorftime 不限产品—表格处理 </option>
+          <option value="merge"> 集合表格 </option>
         </select>
       </div>
 

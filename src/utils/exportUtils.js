@@ -1,38 +1,67 @@
-import React, { useState } from 'react';
-import * as XLSX from 'xlsx';
-import './App.css';
+import * as XLSX from 'sheetjs-style';
 
-function exportToExcel(data, headers, filename, highlightedCells, visibleHeaders) {
-  const sheetData = [visibleHeaders];
+export function exportToExcel(data, headers, filename, highlightedCells, visibleHeaders) {
   const workbook = XLSX.utils.book_new();
-  const worksheet = {};
+  const ws = {};
 
-  data.forEach((row, rowIndex) => {
-    const sheetRow = [];
-    visibleHeaders.forEach((header, colIndex) => {
-      const originalColIndex = headers.indexOf(header);
-      const cellValue = row[originalColIndex];
-      const cellKey = XLSX.utils.encode_cell({ r: sheetData.length, c: colIndex });
-      worksheet[cellKey] = {
-        v: cellValue,
-        s: highlightedCells.has(`${rowIndex}-${originalColIndex}`)
-          ? { fill: { fgColor: { rgb: 'FFFF00' } } }
-          : {}
-      };
-      sheetRow.push(cellValue);
-    });
-    sheetData.push(sheetRow);
+  // Write headers
+  visibleHeaders.forEach((header, colIndex) => {
+    const cellRef = XLSX.utils.encode_cell({ r: 0, c: colIndex });
+    ws[cellRef] = {
+      v: header,
+      t: 's',
+      s: {
+        font: { bold: true },
+        fill: { patternType: 'solid', fgColor: { rgb: 'DDDDDD' } }
+      }
+    };
   });
 
-  const ws = XLSX.utils.aoa_to_sheet(sheetData);
-  worksheet['!ref'] = ws['!ref'];
-  Object.assign(ws, worksheet);
+  // Debug output
+  console.log("Highlighted cells:", [...highlightedCells]);
+
+  // Write data rows
+  data.forEach((row, rowIndex) => {
+    visibleHeaders.forEach((header, colIndex) => {
+      const originalColIndex = headers.indexOf(header);
+      const value = row[originalColIndex];
+      const cellRef = XLSX.utils.encode_cell({ r: rowIndex + 1, c: colIndex });
+
+      const isHighlighted = highlightedCells.has(`${rowIndex}-${originalColIndex}`);
+
+      console.log(`(${rowIndex}, ${originalColIndex}) -> highlight:`, isHighlighted);
+
+      const baseCell = {
+        v: value,
+        t: typeof value === 'number' ? 'n' : 's'
+      };
+
+      if (isHighlighted) {
+        baseCell.s = {
+          font: { bold: true },
+          fill: {
+            patternType: 'solid',
+            fgColor: { rgb: 'FFFF00' }
+          }
+        };
+      }
+
+      ws[cellRef] = baseCell;
+    });
+  });
+
+  const totalRows = data.length + 1;
+  const totalCols = visibleHeaders.length;
+  ws['!ref'] = XLSX.utils.encode_range({
+    s: { r: 0, c: 0 },
+    e: { r: totalRows - 1, c: totalCols - 1 }
+  });
 
   XLSX.utils.book_append_sheet(workbook, ws, 'Sheet1');
   XLSX.writeFile(workbook, `${filename}.xlsx`);
 }
 
-function filterExportData(data, headers, highlightedCells, showOnlyHighlighted, highlightThreshold) {
+export function filterExportData(data, headers, highlightedCells, showOnlyHighlighted, highlightThreshold) {
   return data.filter((row, rowIndex) => {
     const highlightCount = headers.reduce((count, _, colIndex) => (
       highlightedCells.has(`${rowIndex}-${colIndex}`) ? count + 1 : count
@@ -46,11 +75,3 @@ function filterExportData(data, headers, highlightedCells, showOnlyHighlighted, 
     return true;
   });
 }
-
-function handleExport({ data, headers, exportFileName, highlightedCells, visibleColumns, showOnlyHighlighted, highlightThreshold }) {
-  const filtered = filterExportData(data, headers, highlightedCells, showOnlyHighlighted, highlightThreshold);
-  exportToExcel(filtered, headers, exportFileName, highlightedCells, visibleColumns);
-}
-
-export default handleExport;
-export { exportToExcel, filterExportData };
